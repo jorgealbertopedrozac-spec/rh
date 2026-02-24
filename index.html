@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LIMSA RH — Gestión de Personal (Web)</title>
+  <link rel="icon" href="LogoLimsa.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <button class="logoBtn" id="btnLogo" type="button" title="Cambiar vista del logo">
+        <span class="logoBox" id="logoBox">
+          <img id="brandLogo" src="LogoLimsa.png" alt="LIMSA" />
+        </span>
+      </button>
+      <div>
+        <div class="title">LIMSA RH</div>
+        <div class="subtitle">Gestión de Personal • Supabase</div>
+      </div>
+    </div>
+
+    <div class="conn">
+    <span id="userEmail" class="userEmail"></span>
+    <button id="btnLogout" class="btn secondary small hidden" type="button">Salir</button>
+    <span id="connStatus" class="pill bad">Sin sesión</span>
+  </div>
+</header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="personal">Personal</button>
+    <button class="tab" data-tab="gratificaciones">Gratificaciones</button>
+    <button class="tab" data-tab="tiempoextra">Tiempo Extra</button>
+    <button class="tab" data-tab="reportes">Reportes</button>
+    <button class="tab" data-tab="permanencia">Permanencia</button>
+  </nav>
+
+  <main class="container">
+
+    <!-- PERSONAL -->
+    <section id="tab-personal" class="panel active">
+      <div class="panelHeader">
+        <div class="hgroup">
+          <h2>Personal</h2>
+          <p>Altas, edición, filtros e importación/exportación CSV.</p>
+        </div>
+        <div class="actions">
+          <button id="btnImportCSV" class="btn">Importar CSV</button>
+          <button id="btnExportCSV" class="btn secondary">Exportar CSV</button>
+          <button id="btnNewEmpleado" class="btn primary">Alta empleado</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="row gap">
+            <input id="empSearch" class="input" placeholder="Buscar por nómina, nombre, depto…" />
+            <select id="empBod" class="input">
+              <option value="">Todas las BOD</option>
+            </select>
+            <select id="empEstatus" class="input">
+              <option value="">Todos los estatus</option>
+              <option>Activo</option>
+              <option>Baja</option>
+              <option>Incapacidad</option>
+            </select>
+          </div>
+          <div class="hint">Tip: VAC/VACANTE se marca automáticamente en importación. “EXTRA” se lee desde Observaciones.</div>
+
+          <div id="empList" class="list"></div>
+        </div>
+
+        <div class="card" id="empDetail">
+          <div class="emptyState">
+            <div class="emoji">👤</div>
+            <div>
+              <div class="emptyTitle">Selecciona un empleado</div>
+              <div class="emptySub">Aquí verás su detalle, gratificaciones y tiempo extra.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GRATIFICACIONES -->
+    <section id="tab-gratificaciones" class="panel">
+      <div class="panelHeader">
+        <div class="hgroup">
+          <h2>Gratificaciones</h2>
+          <p>Listado global. Para agregar, entra al detalle de un empleado.</p>
+        </div>
+        <div class="actions">
+          <button id="btnImportGratCSV" class="btn">Importar CSV</button>
+          <input id="gratSearch" class="input" placeholder="Buscar por empleado/motivo…" />
+          <select id="gratPrograma" class="input">
+            <option value="">Todos los programas</option>
+            <option value="unicaViernes">Única (viernes)</option>
+            <option value="segundaSemanaViernes">2ª semana (viernes)</option>
+            <option value="cadaSemanaViernes">Cada semana (viernes)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div id="gratList" class="list"></div>
+      </div>
+    </section>
+
+    <!-- TIEMPO EXTRA -->
+    <section id="tab-tiempoextra" class="panel">
+      <div class="panelHeader">
+        <div class="hgroup">
+          <h2>Tiempo Extra</h2>
+          <p>Listado global. Para agregar, entra al detalle de un empleado.</p>
+        </div>
+        <div class="actions">
+          <button id="btnImportTECSV" class="btn">Importar CSV</button>
+          <input id="teSearch" class="input" placeholder="Buscar por empleado/motivo…" />
+          <select id="tePrograma" class="input">
+            <option value="">Todos los programas</option>
+            <option value="unicaViernes">Única (viernes)</option>
+            <option value="segundaSemanaViernes">2ª semana (viernes)</option>
+            <option value="cadaSemanaViernes">Cada semana (viernes)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div id="teList" class="list"></div>
+      </div>
+    </section>
+
+    <!-- REPORTES -->
+    <section id="tab-reportes" class="panel">
+      <div class="panelHeader">
+        <div class="hgroup">
+          <h2>Reportes</h2>
+          <p>Pagos por viernes (gratificaciones y tiempo extra) con exclusiones.</p>
+        </div>
+        <div class="actions">
+          <label class="inline">
+            <span>Viernes:</span>
+            <input id="repFriday" type="date" class="input" />
+          </label>
+          <button id="btnRefreshReport" class="btn">Actualizar</button>
+          <button id="btnExportReportCSV" class="btn secondary">Exportar CSV</button>
+          <button id="btnPrintGratMemo" class="btn secondary">PDF Gratificaciones</button>
+          <button id="btnPrintTEMemo" class="btn secondary">PDF Tiempo Extra</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Gratificaciones</h3>
+          <div id="repGrat" class="list"></div>
+          <div class="totals" id="repGratTotal"></div>
+        </div>
+        <div class="card">
+          <h3>Tiempo Extra</h3>
+          <div id="repTE" class="list"></div>
+          <div class="totals" id="repTETotal"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERMANENCIA -->
+    <section id="tab-permanencia" class="panel">
+      <div class="panelHeader">
+        <div class="hgroup">
+          <h2>Permanencia</h2>
+          <p>Antigüedad por empleado y próximos aniversarios.</p>
+        </div>
+        <div class="actions">
+          <select id="permBod" class="input">
+            <option value="">Todas las BOD</option>
+          </select>
+          <button id="btnRefreshPerm" class="btn">Actualizar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div id="permList" class="list"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Mobile: full-screen employee detail overlay (used on narrow screens) -->
+  <div id="empOverlay" class="empOverlay" aria-hidden="true">
+    <div class="empOverlayCard">
+      <div class="empOverlayHeader">
+        <button class="btn secondary" id="empOverlayBack" type="button">← Volver</button>
+        <div class="empOverlayTitle" id="empOverlayTitle">Detalle</div>
+        <div class="empOverlaySpacer" aria-hidden="true"></div>
+      </div>
+      <div class="empOverlayBody" id="empOverlayBody"></div>
+    </div>
+  </div>
+
+  <!-- GENERIC MODAL -->
+  <dialog id="dlg" class="modal"></dialog>
+
+  <input id="fileInput" type="file" accept=".csv,text/csv" hidden />
+  <input id="fileInputGrat" type="file" accept=".csv,text/csv" hidden />
+  <input id="fileInputTE" type="file" accept=".csv,text/csv" hidden />
+
+  <script type="module" src="app.js"></script>
+<!-- LOGIN MODAL -->
+<dialog id="dlgLogin" class="modal">
+  <form method="dialog" class="modalContent" id="loginForm">
+    <div class="modalHeader">
+      <h3>Iniciar sesión</h3>
+    </div>
+
+    <p class="hint">
+      Ingresa tu correo y contraseña (usuario creado en Supabase Auth).
+    </p>
+
+    <div class="field">
+      <label>Correo</label>
+      <input id="loginEmail" class="input" type="email" autocomplete="email" placeholder="correo@limsa.com" required />
+    </div>
+
+    <div class="field">
+      <label>Contraseña</label>
+      <input id="loginPass" class="input" type="password" autocomplete="current-password" required />
+    </div>
+
+    <div class="row gap right">
+      <button id="btnLogin" class="btn" type="button">Entrar</button>
+    </div>
+
+    <div class="hint small">
+      ¿Olvidaste tu contraseña? Pídela al administrador (o usamos “Reset password” después).
+    </div>
+  </form>
+</dialog>
+
+</body>
+</html>
