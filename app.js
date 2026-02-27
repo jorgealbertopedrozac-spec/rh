@@ -183,17 +183,6 @@ function fmtDateHuman(d){
   return dt.toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'2-digit' });
 }
 
-function empOf(row){
-  // Prefer locally cached empleados (works even if no FK join exists)
-  const id = row?.empleado_id;
-  if(id && Array.isArray(empleados)){
-    const hit = empleados.find(e=>e.id===id);
-    if(hit) return hit;
-  }
-  // Backward compatibility if some queries used embedded joins
-  return row?.empleados || {};
-}
-
 
 function toast(msg, kind='ok'){
   const el = document.createElement('div');
@@ -208,70 +197,6 @@ function toast(msg, kind='ok'){
   document.body.appendChild(el);
   setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; }, 2000);
   setTimeout(()=> el.remove(), 2400);
-}
-
-// ---------------------------
-// Employee picker (for creating Gratificaciones / TE from global tabs)
-// ---------------------------
-async function pickEmpleado({ title='Selecciona empleado', onPick } = {}){
-  if(!connected){ toast('Inicia sesión', 'bad'); return; }
-  if(!empleados || empleados.length===0){
-    try{ empleados = await fetchEmpleados(); }catch(err){ toast('No se pudo cargar empleados', 'bad'); return; }
-  }
-
-  const dlg = $('#dlg');
-  dlg.innerHTML = `
-    <form method="dialog" class="modalContent">
-      <div class="modalHeader">
-        <h3>${escapeHtml(title)}</h3>
-        <button class="iconBtn" value="cancel" aria-label="Cerrar">✕</button>
-      </div>
-      <div class="field">
-        <label>Buscar</label>
-        <input id="pickEmpQ" class="input" placeholder="Nombre o nómina…" />
-      </div>
-      <div id="pickEmpList" class="list" style="max-height:55vh;overflow:auto"></div>
-      <div class="hint">Tip: escribe parte del nombre o la nómina.</div>
-    </form>
-  `;
-  dlg.showModal();
-
-  const qEl = $('#pickEmpQ', dlg);
-  const listEl = $('#pickEmpList', dlg);
-
-  function render(){
-    const q = (qEl.value||'').trim().toLowerCase();
-    let list = empleados;
-    if(q){
-      list = list.filter(e=>{
-        const hay = `${e.nomina||''} ${e.nombre||''} ${e.bod||''}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-    listEl.innerHTML = '';
-    for(const e of list.slice(0, 200)){
-      const row = document.createElement('div');
-      row.className = 'item';
-      row.innerHTML = `
-        <div class="meta">
-          <div class="name">#${escapeHtml(e.nomina)} — ${escapeHtml(e.nombre)}</div>
-          <div class="sub">BOD ${escapeHtml(e.bod||'—')} • ${escapeHtml(e.puesto||'—')} • ${escapeHtml(e.estatus||'—')}</div>
-        </div>
-        <div class="badges"><span class="badge">Elegir</span></div>
-      `;
-      row.addEventListener('click', ()=>{
-        dlg.close();
-        onPick?.(e);
-      });
-      listEl.appendChild(row);
-    }
-    if(list.length===0){
-      listEl.innerHTML = `<div class="emptyState"><div class="emoji">👤</div><div><div class="emptyTitle">Sin resultados</div><div class="emptySub">Prueba otro texto.</div></div></div>`;
-    }
-  }
-
-  qEl.addEventListener('input', render);
-  render();
 }
 
 // ---------------------------
@@ -373,22 +298,18 @@ async function fetchEmpleados(){
 }
 
 async function fetchGratificacionesGlobal(){
-  // NOTE: Some Supabase schemas don't define a FK relationship from
-  // gratificaciones.empleado_id -> empleados.id. The iOS app doesn't rely on joins.
-  // To keep the web app compatible, fetch raw rows and resolve employee locally.
   const { data, error } = await supabase
     .from('gratificaciones')
-    .select('*')
+    .select('*, empleados:empleado_id (id, nomina, nombre, bod, puesto, estatus)')
     .order('creada_en', { ascending:false });
   if(error) throw error;
   return data || [];
 }
 
 async function fetchTiempoExtraGlobal(){
-  // See note in fetchGratificacionesGlobal() about FK joins.
   const { data, error } = await supabase
     .from('tiempo_extra')
-    .select('*')
+    .select('*, empleados:empleado_id (id, nomina, nombre, bod, puesto, estatus)')
     .order('creada_en', { ascending:false });
   if(error) throw error;
   return data || [];
@@ -747,7 +668,7 @@ function openEmpleadoForm(emp=null){
     </form>
   `;
 
-  dlg.showModal();
+  try{ dlg.showModal(); }catch(e){ dlg.setAttribute('open',''); }
 
   const saveBtn = isEdit ? $('#btnEmpSave', dlg) : $('#btnEmpCreate', dlg);
   saveBtn.addEventListener('click', async (ev) => {
@@ -807,11 +728,83 @@ async function confirmDeleteEmpleado(emp){
   }
 }
 
+
+// ---------------------------
+// Picker: seleccionar empleado (para crear desde tabs globales o cuando falta empleado_id)
+// ---------------------------
+function openEmpleadoPicker(opts){
+  const title = opts?.title || 'Seleccionar empleado';
+  const onPick = opts?.onPick;
+  const dlg = $('#dlg');
+  dlg.innerHTML = `
+    <form method="dialog" class="modalContent">
+      <div class="modalHeader">
+        <h3>${escapeHtml(title)}</h3>
+        <button class="iconBtn" value="cancel" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="field">
+        <label>Buscar</label>
+        <input id="pick_q" class="input" placeholder="Nombre o nómina" />
+      </div>
+      <div class="list" id="pick_list" style="max-height:55vh;overflow:auto"></div>
+      <div class="footnote">Toca un empleado para seleccionarlo.</div>
+    </form>
+  `;
+  const qEl = $('#pick_q', dlg);
+  const listEl = $('#pick_list', dlg);
+
+  function render(){
+    const q = (qEl.value||'').trim().toLowerCase();
+    let list = empleados || [];
+    if(q){
+      list = list.filter(e=>{
+        const hay = `${e.nombre||''} ${e.nomina||''} ${e.bod||''}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    listEl.innerHTML = '';
+    if(list.length===0){
+      listEl.innerHTML = `<div class="emptyState"><div class="emoji">👤</div><div><div class="emptyTitle">Sin resultados</div><div class="emptySub">Intenta otra búsqueda.</div></div></div>`;
+      return;
+    }
+    for(const e of list.slice(0, 200)){
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `
+        <div class="meta">
+          <div class="name">${escapeHtml(e.nombre||'—')}</div>
+          <div class="sub">#${escapeHtml(e.nomina||'')} • BOD ${escapeHtml(e.bod||'—')} • ${escapeHtml(e.puesto||'—')}</div>
+        </div>
+        <div class="badges"><span class="badge">${escapeHtml(e.bod||'—')}</span></div>
+      `;
+      div.addEventListener('click', (ev)=>{
+        ev.preventDefault();
+        try{ dlg.close(); }catch{}
+        if(typeof onPick === 'function') onPick(e);
+      });
+      listEl.appendChild(div);
+    }
+  }
+
+  qEl.addEventListener('input', render);
+  render();
+
+  // Make sure dialog appears even when employee overlay is open (mobile)
+  try{ try{ dlg.showModal(); }catch(e){ dlg.setAttribute('open',''); } }catch{ /* if <dialog> fails, nothing we can do here */ }
+}
+
 // ---------------------------
 // CRUD: Gratificaciones
 // ---------------------------
 function openGratForm(g){
   const isEdit = !!g?.id;
+  // If creating from global tab (or any place) and no empleado_id is provided, ask for it first.
+  if(!isEdit && !g?.empleado_id){
+    return openEmpleadoPicker({
+      title: 'Selecciona colaborador',
+      onPick: (e)=> openGratForm({ empleado_id: e.id })
+    });
+  }
   const dlg = $('#dlg');
 
   const exclusiones = Array.isArray(g?.exclusiones) ? g.exclusiones : [];
@@ -847,14 +840,14 @@ function openGratForm(g){
           <label>Fecha objetivo (solo Única)</label>
           <input id="g_fecha" type="date" class="input" value="${g?.fecha_objetivo ? fmtDateISO(g.fecha_objetivo) : ''}" />
         </div>
-        <div class="field" id="g_vig_wrap">
+        <div class="field">
           <label>Vigencia hasta (mes) (si aplica)</label>
           <input id="g_vig" type="date" class="input" value="${g?.vigencia_hasta_mes ? fmtDateISO(g.vigencia_hasta_mes) : ''}" />
         </div>
       </div>
 
       <div class="split">
-        <label class="inline" id="g_sinv_wrap"><input id="g_sinv" type="checkbox" ${g?.sin_vigencia ?? true ? 'checked':''} /> Sin vigencia</label>
+        <label class="inline"><input id="g_sinv" type="checkbox" ${g?.sin_vigencia ?? true ? 'checked':''} /> Sin vigencia</label>
         <label class="inline"><input id="g_act" type="checkbox" ${g?.activa ?? true ? 'checked':''} /> Activa</label>
       </div>
 
@@ -872,27 +865,9 @@ function openGratForm(g){
     </form>
   `;
 
-  dlg.showModal();
+  try{ dlg.showModal(); }catch(e){ dlg.setAttribute('open',''); }
 
   const btn = isEdit ? $('#btnGSave', dlg) : $('#btnGCreate', dlg);
-  // Si el programa es Única, 'Sin vigencia' y 'Vigencia hasta' no aplican (evita confusión)
-  const applyGProgUI = () => {
-    const sel = $('#g_prog', dlg);
-    const isUnica = (sel?.value === 'unicaViernes');
-    const w1 = $('#g_sinv_wrap', dlg);
-    const w2 = $('#g_vig_wrap', dlg);
-    if(w1) w1.style.display = isUnica ? 'none' : '';
-    if(w2) w2.style.display = isUnica ? 'none' : '';
-    if(isUnica){
-      const sinv = $('#g_sinv', dlg);
-      const vig = $('#g_vig', dlg);
-      if(sinv) sinv.checked = false;
-      if(vig) vig.value = '';
-    }
-  };
-  $('#g_prog', dlg)?.addEventListener('change', applyGProgUI);
-  applyGProgUI();
-
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
     try{
@@ -907,12 +882,6 @@ function openGratForm(g){
         activa: $('#g_act', dlg).checked,
         exclusiones: parseExclusiones($('#g_ex', dlg).value),
       };
-      // Normaliza: en programa Única la vigencia NO aplica
-      if(payload.programa === 'unicaViernes'){
-        payload.sin_vigencia = false;
-        payload.vigencia_hasta_mes = null;
-      }
-
       if(!payload.motivo) throw new Error('Falta motivo');
       if(!(payload.monto >= 0)) throw new Error('Monto inválido');
 
@@ -960,6 +929,13 @@ function openGratForm(g){
 // ---------------------------
 function openTEForm(t){
   const isEdit = !!t?.id;
+  // If creating and no empleado_id is provided, ask for it first.
+  if(!isEdit && !t?.empleado_id){
+    return openEmpleadoPicker({
+      title: 'Selecciona colaborador',
+      onPick: (e)=> openTEForm({ empleado_id: e.id })
+    });
+  }
   const dlg = $('#dlg');
 
   const exclusiones = Array.isArray(t?.exclusiones) ? t.exclusiones : [];
@@ -995,14 +971,14 @@ function openTEForm(t){
           <label>Fecha objetivo (solo Única)</label>
           <input id="t_fecha" type="date" class="input" value="${t?.fecha_objetivo ? fmtDateISO(t.fecha_objetivo) : ''}" />
         </div>
-        <div class="field" id="g_vig_wrap">
+        <div class="field">
           <label>Vigencia hasta (mes) (si aplica)</label>
           <input id="t_vig" type="date" class="input" value="${t?.vigencia_hasta_mes ? fmtDateISO(t.vigencia_hasta_mes) : ''}" />
         </div>
       </div>
 
       <div class="split">
-        <label class="inline" id="t_sinv_wrap"><input id="t_sinv" type="checkbox" ${t?.sin_vigencia ?? true ? 'checked':''} /> Sin vigencia</label>
+        <label class="inline"><input id="t_sinv" type="checkbox" ${t?.sin_vigencia ?? true ? 'checked':''} /> Sin vigencia</label>
         <label class="inline"><input id="t_act" type="checkbox" ${t?.activa ?? true ? 'checked':''} /> Activo</label>
       </div>
 
@@ -1019,27 +995,9 @@ function openTEForm(t){
     </form>
   `;
 
-  dlg.showModal();
+  try{ dlg.showModal(); }catch(e){ dlg.setAttribute('open',''); }
 
   const btn = isEdit ? $('#btnTSave', dlg) : $('#btnTCreate', dlg);
-  // Si el programa es Única, 'Sin vigencia' y 'Vigencia hasta' no aplican (evita confusión)
-  const applyTProgUI = () => {
-    const sel = $('#t_prog', dlg);
-    const isUnica = (sel?.value === 'unicaViernes');
-    const w1 = $('#t_sinv_wrap', dlg);
-    const w2 = $('#t_vig_wrap', dlg);
-    if(w1) w1.style.display = isUnica ? 'none' : '';
-    if(w2) w2.style.display = isUnica ? 'none' : '';
-    if(isUnica){
-      const sinv = $('#t_sinv', dlg);
-      const vig = $('#t_vig', dlg);
-      if(sinv) sinv.checked = false;
-      if(vig) vig.value = '';
-    }
-  };
-  $('#t_prog', dlg)?.addEventListener('change', applyTProgUI);
-  applyTProgUI();
-
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
     try{
@@ -1054,18 +1012,6 @@ function openTEForm(t){
         activa: $('#t_act', dlg).checked,
         exclusiones: parseExclusiones($('#t_ex', dlg).value),
       };
-      // Normaliza: en programa Única la vigencia NO aplica
-      if(payload.programa === 'unicaViernes'){
-        payload.sin_vigencia = false;
-        payload.vigencia_hasta_mes = null;
-      }
-
-      // Normaliza: en programa Única la vigencia NO aplica
-      if(payload.programa === 'unicaViernes'){
-        payload.sin_vigencia = false;
-        payload.vigencia_hasta_mes = null;
-      }
-
       if(!payload.motivo) throw new Error('Falta motivo');
       if(!(payload.horas >= 0)) throw new Error('Horas inválidas');
 
@@ -1130,13 +1076,9 @@ function renderGratificacionesGlobal(){
   const prog = $('#gratPrograma').value;
   let list = gratificacionesGlobal;
   if(prog) list = list.filter(g=>g.programa === prog);
-
-  // Resolve employee locally (avoid depending on FK joins)
-  const empById = new Map((empleados||[]).map(e=>[e.id, e]));
-
   if(q){
     list = list.filter(g=>{
-      const emp = empById.get(g.empleado_id);
+      const emp = g.empleados;
       const hay = `${emp?.nombre||''} ${g.motivo||''} ${emp?.bod||''}`.toLowerCase();
       return hay.includes(q);
     });
@@ -1150,7 +1092,7 @@ function renderGratificacionesGlobal(){
   }
 
   for(const g of list){
-    const emp = empById.get(g.empleado_id);
+    const emp = g.empleados;
     const div = document.createElement('div');
     div.className = 'item';
     div.innerHTML = `
@@ -1163,28 +1105,16 @@ function renderGratificacionesGlobal(){
         ${g.activa ? '<span class="badge ok">Activa</span>' : '<span class="badge danger">Inactiva</span>'}
       </div>
     `;
-
-    // Click = editar (como en iOS)
     div.addEventListener('click', async ()=>{
-      await openGratForm(g, { fromGlobal:true });
+      const empId = emp?.id;
+      if(empId){
+        // Remember where we came from so mobile overlay can return here.
+        empNavContext = { fromTab: getActiveTab(), scrollY: window.scrollY || 0 };
+        // switch to personal and select
+        goToTab('personal');
+        await selectEmpleado(empId, { scrollToDetail:true, openedFromTab: empNavContext.fromTab });
+      }
     });
-
-    // Quick jump to employee
-    const btn = document.createElement('button');
-    btn.className = 'miniBtn';
-    btn.type = 'button';
-    btn.textContent = '👤';
-    btn.title = 'Ver empleado';
-    btn.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
-      const empId = emp?.id || g.empleado_id;
-      if(!empId) return;
-      empNavContext = { fromTab: getActiveTab(), scrollY: window.scrollY || 0 };
-      goToTab('personal');
-      await selectEmpleado(empId, { scrollToDetail:true, openedFromTab: empNavContext.fromTab });
-    });
-    div.querySelector('.badges')?.prepend(btn);
-
     root.appendChild(div);
   }
 }
@@ -1194,12 +1124,9 @@ function renderTiempoExtraGlobal(){
   const prog = $('#tePrograma').value;
   let list = tiempoExtraGlobal;
   if(prog) list = list.filter(t=>t.programa === prog);
-
-  const empById = new Map((empleados||[]).map(e=>[e.id, e]));
-
   if(q){
     list = list.filter(t=>{
-      const emp = empById.get(t.empleado_id);
+      const emp = t.empleados;
       const hay = `${emp?.nombre||''} ${t.motivo||''} ${emp?.bod||''}`.toLowerCase();
       return hay.includes(q);
     });
@@ -1213,7 +1140,7 @@ function renderTiempoExtraGlobal(){
   }
 
   for(const t of list){
-    const emp = empById.get(t.empleado_id);
+    const emp = t.empleados;
     const div = document.createElement('div');
     div.className = 'item';
     div.innerHTML = `
@@ -1226,26 +1153,14 @@ function renderTiempoExtraGlobal(){
         ${t.activa ? '<span class="badge ok">Activo</span>' : '<span class="badge danger">Inactivo</span>'}
       </div>
     `;
-
     div.addEventListener('click', async ()=>{
-      await openTEForm(t);
+      const empId = emp?.id;
+      if(empId){
+        empNavContext = { fromTab: getActiveTab(), scrollY: window.scrollY || 0 };
+        goToTab('personal');
+        await selectEmpleado(empId, { scrollToDetail:true, openedFromTab: empNavContext.fromTab });
+      }
     });
-
-    const btn = document.createElement('button');
-    btn.className = 'miniBtn';
-    btn.type = 'button';
-    btn.textContent = '👤';
-    btn.title = 'Ver empleado';
-    btn.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
-      const empId = emp?.id || t.empleado_id;
-      if(!empId) return;
-      empNavContext = { fromTab: getActiveTab(), scrollY: window.scrollY || 0 };
-      goToTab('personal');
-      await selectEmpleado(empId, { scrollToDetail:true, openedFromTab: empNavContext.fromTab });
-    });
-    div.querySelector('.badges')?.prepend(btn);
-
     root.appendChild(div);
   }
 }
@@ -1419,7 +1334,7 @@ function renderReportList(containerId, list, friday, tableName){
     root.appendChild(header);
 
     items.forEach(x => {
-      const emp = empOf(x);
+      const emp = x.empleados;
       const div = document.createElement('div');
       div.className = 'item';
       const right = (tableName==='gratificaciones')
@@ -1495,7 +1410,7 @@ function exportReportCSV(){
   lines.push(['Tipo','Nomina','Nombre','BOD','Puesto','Motivo','Programa','Monto','Horas'].join(','));
 
   for(const g of dueG){
-    const e = empOf(g) || {};
+    const e = g.empleados || {};
     lines.push([
       'Gratificacion',
       safeCSV(e.nomina),
@@ -1509,7 +1424,7 @@ function exportReportCSV(){
     ].join(','));
   }
   for(const t of dueT){
-    const e = empOf(t) || {};
+    const e = t.empleados || {};
     lines.push([
       'TiempoExtra',
       safeCSV(e.nomina),
@@ -1573,8 +1488,8 @@ function fmtDiaDeMesES(date){
 }
 
 function sortByBodNombre(a,b){
-  const ea = empOf(a) || {};
-  const eb = empOf(b) || {};
+  const ea = a.empleados || {};
+  const eb = b.empleados || {};
   const ba = (ea.bod||'').toString();
   const bb = (eb.bod||'').toString();
   if(ba === bb){
@@ -1715,7 +1630,7 @@ function printTEMemo(){
 
 function buildMemoTableGrat(list){
   const rows = list.map(g=>{
-    const e = empOf(g) || {};
+    const e = g.empleados || {};
     return `
       <tr>
         <td data-label="Empleado" style="width:45%">${escapeHtml(e.nombre||'—')}</td>
@@ -1741,7 +1656,7 @@ function buildMemoTableGrat(list){
 
 function buildMemoTableTE(list){
   const rows = list.map(t=>{
-    const e = empOf(t) || {};
+    const e = t.empleados || {};
     const horasTxt = Number(t.horas||0).toFixed(2);
     return `
       <tr>
@@ -1823,7 +1738,7 @@ function printReport(){
 
 function printTable(list, kind){
   const rows = list.map(x=>{
-    const e = empOf(x) || {};
+    const e = x.empleados || {};
     const val = kind==='grat' ? fmtMoney(x.monto) : `${Number(x.horas||0)} h`;
     return `<tr>
       <td>${escapeHtml(e.nomina||'')}</td>
@@ -2252,17 +2167,11 @@ async function refreshEmpleados(){
 }
 
 async function refreshGratificacionesGlobal(){
-  if(!empleados || empleados.length===0){
-    try{ empleados = await fetchEmpleados(); }catch(_){/* ignore */}
-  }
   gratificacionesGlobal = await fetchGratificacionesGlobal();
   renderGratificacionesGlobal();
 }
 
 async function refreshTiempoExtraGlobal(){
-  if(!empleados || empleados.length===0){
-    try{ empleados = await fetchEmpleados(); }catch(_){/* ignore */}
-  }
   tiempoExtraGlobal = await fetchTiempoExtraGlobal();
   renderTiempoExtraGlobal();
 }
@@ -2355,20 +2264,6 @@ function setupUI(){
   ['empSearch','empBod','empEstatus'].forEach(id=>{
     $(`#${id}`).addEventListener('input', renderEmpleados);
     $(`#${id}`).addEventListener('change', renderEmpleados);
-  });
-
-  // Crear desde tabs globales (como iOS)
-  $('#btnNewGrat')?.addEventListener('click', async ()=>{
-    await pickEmpleado({
-      title: 'Nueva gratificación — elige empleado',
-      onPick: (e)=> openGratForm({ empleado_id: e.id, activa: true, sin_vigencia: true, programa:'segundaSemanaViernes' })
-    });
-  });
-  $('#btnNewTE')?.addEventListener('click', async ()=>{
-    await pickEmpleado({
-      title: 'Nuevo tiempo extra — elige empleado',
-      onPick: (e)=> openTEForm({ empleado_id: e.id, activa: true, programa:'cadaSemanaViernes' })
-    });
   });
 
   // New employee

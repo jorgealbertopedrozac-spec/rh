@@ -178,10 +178,6 @@ textarea.input{resize:vertical}
 .badge.warn{border-color:rgba(255,199,87,.35);color:#fff0cc;background:rgba(255,199,87,.08)}
 .badge.danger{border-color:rgba(255,91,122,.35);color:#ffd1da;background:rgba(255,91,122,.08)}
 
-/* Small icon button used inside list badges (e.g., jump to employee) */
-.miniBtn{appearance:none;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;border-radius:10px;padding:4px 8px;cursor:pointer;line-height:1}
-.miniBtn:active{transform:translateY(1px)}
-
 .hint{margin-top:10px;font-size:12px;color:var(--muted)}
 
 .emptyState{display:flex;align-items:center;gap:12px;padding:30px 12px;color:var(--muted)}
@@ -265,73 +261,8 @@ kbd{background:rgba(255,255,255,.06);border:1px solid var(--line);border-bottom-
 @media (max-width:520px){ .modalContent{ width:min(92vw, 520px); } }
 
 
-/* =========================
-   Contrast / Readability Fix
-   - Prevent iOS/Safari autofill from forcing dark text on dark backgrounds
-   - Ensure native controls (date/select) stay readable
-   ========================= */
-
-/* Slightly brighter muted text + clearer borders (override) */
-:root{
-  --muted:#b7c6d8;
-  --line:rgba(255,255,255,.11);
-}
-
-/* Tell the browser we are using a dark UI so it draws form controls accordingly */
-html{ color-scheme: dark; }
-input, select, textarea, button{ color-scheme: dark; }
-
-/* Placeholders */
-::placeholder{ color: rgba(183,198,216,.72); opacity:1; }
-
-/* iOS/Safari/Chrome autofill (email/password etc.) */
-input:-webkit-autofill,
-textarea:-webkit-autofill,
-select:-webkit-autofill{
-  -webkit-text-fill-color: var(--text) !important;
-  caret-color: var(--text) !important;
-  transition: background-color 999999s ease-in-out 0s;
-  box-shadow: 0 0 0 1000px rgba(255,255,255,.04) inset !important;
-  border:1px solid var(--line) !important;
-}
-
-/* Ensure inputs always have readable text even when the browser applies its own styles */
-.input,
-.input:visited{
-  color: var(--text);
-}
-
-/* Date picker icon visibility on dark background */
-input[type="date"].input::-webkit-calendar-picker-indicator{
-  filter: invert(1);
-  opacity:.85;
-}
-
-/* Native select options: readable background/text */
-select.input option{
-  background: var(--panel);
-  color: var(--text);
-}
-
-/* Improve readability of helper text on gradient cards */
-.hint, .small, .meta .sub, .pill{
-  color: var(--muted);
-}
-
-/* Make badges more legible (some browsers render them darker) */
-.badge{
-  color: rgba(231,238,247,.82);
-  border-color: rgba(255,255,255,.14);
-}
-
-/* Links if any appear */
-a{ color: var(--primary); }
-a:visited{ color: var(--primary2); }
-
-/* Focus ring clarity */
-.input:focus, .btn:focus, .tab:focus, .miniBtn:focus{
-  outline: none;
-  border-color: rgba(91,211,255,.55);
-  box-shadow: 0 0 0 3px rgba(91,211,255,.14);
-}
-
+/* Ensure dialogs appear above mobile employee overlay (iOS Safari z-index quirk) */
+dialog{ z-index: 20050; border: none; padding: 0; background: transparent; }
+dialog::backdrop{ background: rgba(7,10,16,.65); z-index: 20040; }
+.modalContent{ background: rgba(18,24,36,.98); border:1px solid rgba(255,255,255,.10); border-radius:16px; padding:14px; color:var(--text); width:min(520px, 94vw); }
+@media (max-width:520px){ .modalContent{ width: 94vw; } }
