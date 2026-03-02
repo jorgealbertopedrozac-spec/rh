@@ -176,6 +176,16 @@ function fmtDateISO(d){
   const day = String(dt.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
 }
+
+function fmtDateDMY(d){
+  const dt = parseDateLocal(d);
+  if(!dt) return '';
+  const dd = String(dt.getDate()).padStart(2,'0');
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  const yy = dt.getFullYear();
+  return `${dd}-${mm}-${yy}`;
+}
+
 function fmtDateHuman(d){
   if(!d) return '—';
   const dt = parseDateLocal(d);
@@ -1583,7 +1593,7 @@ function sortByBodNombre(a,b){
   return ba.localeCompare(bb, 'es', { sensitivity:'base' });
 }
 
-function memoShell({ title, headerLines, introHtml, tableHtml }){
+function memoShell({ docTitle, visibleTitle, headerLines, introHtml, tableHtml }){
   const css = `
     @page{ size: letter; margin: 14mm; }
     body{ font-family: Arial, sans-serif; color:#111; }
@@ -1624,12 +1634,12 @@ function memoShell({ title, headerLines, introHtml, tableHtml }){
 
   return `
     <html><head><meta charset="utf-8" />
-      <title>${escapeHtml(title)}</title>
+      <title>${escapeHtml(docTitle || visibleTitle || '')}</title>
       <style>${css}</style>
     </head><body>
       <div class="top">
         <img class="logo" src="LogoLimsa.png" alt="LIMSA" />
-        <div class="title">${escapeHtml(title)}</div>
+        <div class="title">${escapeHtml(visibleTitle || '')}</div>
       </div>
 
       <div class="meta">${header}</div>
@@ -1666,7 +1676,8 @@ function printGratMemo(){
 
   const table = buildMemoTableGrat(visibles);
   const html = memoShell({
-    title: 'MEMORÁNDUM Gratificaciones',
+    docTitle: `memo_gratificaciones_${fmtDateDMY(friday)}`,
+    visibleTitle: 'MEMORÁNDUM Gratificaciones',
     headerLines: [
       `FECHA: ${fechaHoy}`,
       'PARA: Departamento Recursos Humanos',
@@ -1700,7 +1711,8 @@ function printTEMemo(){
 
   const table = buildMemoTableTE(pagables);
   const html = memoShell({
-    title: 'MEMORÁNDUM Tiempo extra',
+    docTitle: `memo_tiempo_extra_${fmtDateDMY(friday)}`,
+    visibleTitle: 'MEMORÁNDUM Tiempo extra',
     headerLines: [
       `FECHA: ${fechaHoy}`,
       'PARA: Departamento Recursos Humanos',
