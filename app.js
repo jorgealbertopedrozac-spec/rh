@@ -1,8 +1,8 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 // Supabase (fijo para GitHub Pages)
-const SUPABASE_URL = 'https://bojnmbirdquevfmsbrbi.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvam5tYmlyZHF1ZXZmbXNicmJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzU4NzcsImV4cCI6MjA4NzQ1MTg3N30.sQ6qP7Qmo4NSGbCHE26m1mQr3DlsogVozycFSKrz27E';
+const SUPABASE_URL = 'https://rbtpusdauvnaszyluptt.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJidHB1c2RhdXZuYXN6eWx1cHR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDc2ODYsImV4cCI6MjA4ODY4MzY4Nn0.Tt9TNXvFtVmo3hdmskKg7PhVn5uDk12ulVSBKLpMHtw';
 
 // ---------------------------
 // Globals / State
@@ -2255,6 +2255,99 @@ async function exportEmpleadosCSV(){
   downloadText(lines.join('\n'), 'plantilla_personal_export.csv', 'text/csv;charset=utf-8');
 }
 
+function estadoTri(record){
+  // Solo 3 estados para export (compat con backups): Vigente | Pagada | Cancelada
+  if(!record?.activa) return 'Cancelada';
+  if(record.programa === 'unicaViernes' && record.fecha_objetivo){
+    const f = fridayOfWeek(parseDateLocal(record.fecha_objetivo) || new Date(record.fecha_objetivo));
+    const today = new Date(); today.setHours(0,0,0,0);
+    if(f && f.getTime() < today.getTime()) return 'Pagada';
+  }
+  return 'Vigente';
+}
+
+function fechaPagoTri(record){
+  if(estadoTri(record) !== 'Pagada') return '';
+  const f = fridayOfWeek(parseDateLocal(record.fecha_objetivo) || new Date(record.fecha_objetivo));
+  return f ? fmtDateISO(f) : '';
+}
+
+function exportGratificacionesCSV(){
+  const q = ($('#gratSearch')?.value||'').trim().toLowerCase();
+  const prog = $('#gratPrograma')?.value || '';
+  let list = gratificacionesGlobal || [];
+  if(prog) list = list.filter(g=>g.programa === prog);
+
+  const empById = new Map((empleados||[]).map(e=>[e.id, e]));
+  if(q){
+    list = list.filter(g=>{
+      const emp = empById.get(g.empleado_id);
+      const hay = `${emp?.nombre||''} ${g.motivo||''} ${emp?.bod||''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  const headers = ['Nombre','Motivo','Monto','Programa','FechaObjetivo','SinVigencia','VigenciaHastaMes','Estado','FechaPago'];
+  const lines = [headers.join(',')];
+
+  for(const g of list){
+    const emp = empById.get(g.empleado_id);
+    const estado = estadoTri(g);
+    const row = [
+      safeCSV(emp?.nombre || ''),
+      safeCSV(g.motivo || ''),
+      safeCSV(Number(g.monto||0).toFixed(2)),
+      safeCSV(g.programa || ''),
+      safeCSV(g.fecha_objetivo ? fmtDateISO(g.fecha_objetivo) : ''),
+      safeCSV(g.sin_vigencia ? 'Si' : 'No'),
+      safeCSV(g.vigencia_hasta_mes ? fmtDateISO(g.vigencia_hasta_mes) : ''),
+      safeCSV(estado),
+      safeCSV(fechaPagoTri(g)),
+    ];
+    lines.push(row.join(','));
+  }
+
+  downloadText(lines.join('\n'), `gratificaciones_export_${fmtDateDMY(new Date())}.csv`, 'text/csv;charset=utf-8');
+}
+
+function exportTiempoExtraCSV(){
+  const q = ($('#teSearch')?.value||'').trim().toLowerCase();
+  const prog = $('#tePrograma')?.value || '';
+  let list = tiempoExtraGlobal || [];
+  if(prog) list = list.filter(t=>t.programa === prog);
+
+  const empById = new Map((empleados||[]).map(e=>[e.id, e]));
+  if(q){
+    list = list.filter(t=>{
+      const emp = empById.get(t.empleado_id);
+      const hay = `${emp?.nombre||''} ${t.motivo||''} ${emp?.bod||''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  const headers = ['Nombre','Motivo','Horas','Programa','FechaObjetivo','SinVigencia','VigenciaHastaMes','Estado','FechaPago'];
+  const lines = [headers.join(',')];
+
+  for(const t of list){
+    const emp = empById.get(t.empleado_id);
+    const estado = estadoTri(t);
+    const row = [
+      safeCSV(emp?.nombre || ''),
+      safeCSV(t.motivo || ''),
+      safeCSV(String(Number(t.horas||0))),
+      safeCSV(t.programa || ''),
+      safeCSV(t.fecha_objetivo ? fmtDateISO(t.fecha_objetivo) : ''),
+      safeCSV(t.sin_vigencia ? 'Si' : 'No'),
+      safeCSV(t.vigencia_hasta_mes ? fmtDateISO(t.vigencia_hasta_mes) : ''),
+      safeCSV(estado),
+      safeCSV(fechaPagoTri(t)),
+    ];
+    lines.push(row.join(','));
+  }
+
+  downloadText(lines.join('\n'), `tiempo_extra_export_${fmtDateDMY(new Date())}.csv`, 'text/csv;charset=utf-8');
+}
+
 // ---------------------------
 // Refresh orchestrators
 // ---------------------------
@@ -2440,6 +2533,14 @@ function setupUI(){
   // Export
   $('#btnExportCSV').addEventListener('click', async ()=>{
     try{ await exportEmpleadosCSV(); }catch(e){ toast('No se pudo exportar', 'bad'); }
+  });
+
+  // Export Gratificaciones / Tiempo Extra
+  $('#btnExportGratCSV')?.addEventListener('click', ()=>{
+    try{ exportGratificacionesCSV(); }catch(e){ console.error(e); toast('No se pudo exportar gratificaciones', 'bad'); }
+  });
+  $('#btnExportTECSV')?.addEventListener('click', ()=>{
+    try{ exportTiempoExtraCSV(); }catch(e){ console.error(e); toast('No se pudo exportar tiempo extra', 'bad'); }
   });
 
   // Global searches
