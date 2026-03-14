@@ -1380,9 +1380,16 @@ async function refreshReport(){
   if(tiempoExtraGlobal.length===0) tiempoExtraGlobal = await fetchTiempoExtraGlobal();
 
   const dateStr = $('#repFriday').value;
-  const friday = dateStr ? parseDateLocal(dateStr) : nextFriday(new Date());
+  const rawDate = dateStr ? parseDateLocal(dateStr) : nextFriday(new Date());
+  rawDate.setHours(0,0,0,0);
+
+  // Permite elegir cualquier fecha; el reporte siempre calcula con el viernes
+  // de la semana correspondiente para que 2026-03-09 encuentre el pago del 2026-03-13.
+  const friday = isFriday(rawDate) ? rawDate : fridayOfWeek(rawDate);
   friday.setHours(0,0,0,0);
-  if(!dateStr) $('#repFriday').value = fmtDateISO(friday);
+
+  // Refleja la fecha normalizada en el input para evitar confusión visual.
+  $('#repFriday').value = fmtDateISO(friday);
 
   const dueG = gratificacionesGlobal.filter(g=> dueGratificacion(g, friday));
   const dueT = tiempoExtraGlobal.filter(t=> dueTiempoExtra(t, friday));
