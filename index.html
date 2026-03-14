@@ -101,6 +101,11 @@
             <option value="segundaSemanaViernes">2ª semana (viernes)</option>
             <option value="cadaSemanaViernes">Cada semana (viernes)</option>
           </select>
+          <select id="gratEstado" class="input">
+            <option value="">Activas e inactivas</option>
+            <option value="activas">Solo activas</option>
+            <option value="inactivas">Solo inactivas</option>
+          </select>
         </div>
       </div>
       <div class="card">
@@ -126,6 +131,11 @@
             <option value="segundaSemanaViernes">2ª semana (viernes)</option>
             <option value="cadaSemanaViernes">Cada semana (viernes)</option>
           </select>
+          <select id="teEstado" class="input">
+            <option value="">Activos e inactivos</option>
+            <option value="activas">Solo activos</option>
+            <option value="inactivas">Solo inactivos</option>
+          </select>
         </div>
       </div>
       <div class="card">
@@ -145,6 +155,7 @@
             <span>Viernes:</span>
             <input id="repFriday" type="date" class="input" />
           </label>
+          <input id="repSearch" class="input" placeholder="Buscar por empleado/motivo…" />
           <button id="btnRefreshReport" class="btn">Actualizar</button>
           <button id="btnExportReportCSV" class="btn secondary">Exportar CSV</button>
           <button id="btnPrintGratMemo" class="btn secondary">PDF Gratificaciones</button>
