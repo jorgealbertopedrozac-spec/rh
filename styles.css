@@ -335,3 +335,13 @@ a:visited{ color: var(--primary2); }
   box-shadow: 0 0 0 3px rgba(91,211,255,.14);
 }
 
+
+
+.report-actions{align-items:flex-end}
+.report-search-wrap{display:flex;flex-direction:column;gap:6px;min-width:280px;flex:1 1 320px}
+.report-search-label{font-size:12px;font-weight:700;color:#475569}
+.report-search-input{width:100%;min-width:280px}
+@media (max-width: 900px){
+  .report-search-wrap{min-width:100%;flex-basis:100%}
+  .report-search-input{min-width:0}
+}

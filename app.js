@@ -1400,18 +1400,37 @@ async function refreshReport(){
   const dueG = gratificacionesGlobal.filter(g=> dueGratificacion(g, friday));
   const dueT = tiempoExtraGlobal.filter(t=> dueTiempoExtra(t, friday));
 
+  const repQuery = ($('#repSearch')?.value || '').trim().toLowerCase();
+  const reportMatches = (x) => {
+    if(!repQuery) return true;
+    const emp = empOf(x) || {};
+    const hay = [
+      emp.nombre,
+      emp.nomina,
+      emp.bod,
+      emp.puesto,
+      x.motivo,
+      programaLabel(x.programa),
+      describePrograma(x),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(repQuery);
+  };
+
+  const shownG = dueG.filter(reportMatches);
+  const shownT = dueT.filter(reportMatches);
+
   // Render
-  renderReportList('repGrat', dueG, friday, 'gratificaciones');
-  renderReportList('repTE', dueT, friday, 'tiempo_extra');
+  renderReportList('repGrat', shownG, friday, 'gratificaciones');
+  renderReportList('repTE', shownT, friday, 'tiempo_extra');
 
-  const totalG = dueG.reduce((s,g)=> s + Number(g.monto||0), 0);
-  $('#repGratTotal').innerHTML = `<div>Total</div><div><b>${fmtMoney(totalG)}</b> • ${dueG.length} item(s)</div>`;
+  const totalG = shownG.reduce((s,g)=> s + Number(g.monto||0), 0);
+  $('#repGratTotal').innerHTML = `<div>Total</div><div><b>${fmtMoney(totalG)}</b> • ${shownG.length} item(s)</div>`;
 
-  const totalH = dueT.reduce((s,t)=> s + Number(t.horas||0), 0);
-  $('#repTETotal').innerHTML = `<div>Total</div><div><b>${totalH} h</b> • ${dueT.length} item(s)</div>`;
+  const totalH = shownT.reduce((s,t)=> s + Number(t.horas||0), 0);
+  $('#repTETotal').innerHTML = `<div>Total</div><div><b>${totalH} h</b> • ${shownT.length} item(s)</div>`;
 
   // cache for export
-  window.__lastReport = { friday, dueG, dueT };
+  window.__lastReport = { friday, dueG: shownG, dueT: shownT };
 }
 
 function renderReportList(containerId, list, friday, tableName){
@@ -2573,6 +2592,7 @@ function setupUI(){
   // Reportes
   $('#btnRefreshReport').addEventListener('click', refreshReport);
   $('#repFriday').addEventListener('change', refreshReport);
+  $('#repSearch')?.addEventListener('input', refreshReport);
   $('#btnExportReportCSV').addEventListener('click', exportReportCSV);
   $('#btnPrintGratMemo').addEventListener('click', printGratMemo);
   $('#btnPrintTEMemo').addEventListener('click', printTEMemo);
