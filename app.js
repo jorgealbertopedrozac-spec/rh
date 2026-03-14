@@ -1138,11 +1138,8 @@ function parseExclusiones(txt){
 function renderGratificacionesGlobal(){
   const q = ($('#gratSearch').value||'').trim().toLowerCase();
   const prog = $('#gratPrograma').value;
-  const estado = $('#gratEstado')?.value || '';
   let list = gratificacionesGlobal;
   if(prog) list = list.filter(g=>g.programa === prog);
-  if(estado === 'activas') list = list.filter(g=> !!g.activa);
-  if(estado === 'inactivas') list = list.filter(g=> !g.activa);
 
   // Resolve employee locally (avoid depending on FK joins)
   const empById = new Map((empleados||[]).map(e=>[e.id, e]));
@@ -1205,11 +1202,8 @@ function renderGratificacionesGlobal(){
 function renderTiempoExtraGlobal(){
   const q = ($('#teSearch').value||'').trim().toLowerCase();
   const prog = $('#tePrograma').value;
-  const estado = $('#teEstado')?.value || '';
   let list = tiempoExtraGlobal;
   if(prog) list = list.filter(t=>t.programa === prog);
-  if(estado === 'activas') list = list.filter(t=> !!t.activa);
-  if(estado === 'inactivas') list = list.filter(t=> !t.activa);
 
   const empById = new Map((empleados||[]).map(e=>[e.id, e]));
 
@@ -1365,7 +1359,6 @@ function dueTiempoExtra(t, friday){
     if(!isFriday(friday)) return false;
     const sf = secondFridayOfMonth(friday);
     if(!sf || !isSameDay(sf, friday)) return false;
-    if(isExcluded(t, friday)) return false;
     if(t.sin_vigencia) return true;
     if(!t.vigencia_hasta_mes) return true;
     const fin = lastDayOfMonth(parseDateLocal(t.vigencia_hasta_mes) || new Date(t.vigencia_hasta_mes));
@@ -1380,29 +1373,6 @@ function dueTiempoExtra(t, friday){
   return false;
 }
 
-function shouldShowExcludedInReport(record, friday){
-  if(!record?.activa) return false;
-  if(!isExcluded(record, friday)) return false;
-  if(record.programa === 'cadaSemanaViernes') return isFriday(friday);
-  if(record.programa === 'segundaSemanaViernes'){
-    if(!isFriday(friday)) return false;
-    const sf = secondFridayOfMonth(friday);
-    if(!sf || !isSameDay(sf, friday)) return false;
-    if(record.sin_vigencia) return true;
-    if(!record.vigencia_hasta_mes) return true;
-    const fin = lastDayOfMonth(parseDateLocal(record.vigencia_hasta_mes) || new Date(record.vigencia_hasta_mes));
-    return friday <= fin;
-  }
-  return false;
-}
-
-function matchesReportSearch(row, q){
-  if(!q) return true;
-  const emp = empOf(row);
-  const hay = `${emp?.nombre||''} ${row?.motivo||''} ${emp?.bod||''} ${emp?.puesto||''}`.toLowerCase();
-  return hay.includes(q);
-}
-
 async function refreshReport(){
   if(!connected) return;
   // Ensure we have global lists
@@ -1410,32 +1380,26 @@ async function refreshReport(){
   if(tiempoExtraGlobal.length===0) tiempoExtraGlobal = await fetchTiempoExtraGlobal();
 
   const dateStr = $('#repFriday').value;
-  const friday = dateStr ? parseDateLocal(dateStr) : nextFriday(new Date());
+  const selectedDate = dateStr ? parseDateLocal(dateStr) : nextFriday(new Date());
+  const friday = dateStr ? fridayOfWeek(selectedDate) : nextFriday(new Date());
   friday.setHours(0,0,0,0);
-  if(!dateStr) $('#repFriday').value = fmtDateISO(friday);
-
-  const q = ($('#repSearch')?.value || '').trim().toLowerCase();
+  $('#repFriday').value = fmtDateISO(friday);
 
   const dueG = gratificacionesGlobal.filter(g=> dueGratificacion(g, friday));
   const dueT = tiempoExtraGlobal.filter(t=> dueTiempoExtra(t, friday));
-  const excludedG = gratificacionesGlobal.filter(g=> shouldShowExcludedInReport(g, friday) && !dueG.some(x=>x.id===g.id));
-  const excludedT = tiempoExtraGlobal.filter(t=> shouldShowExcludedInReport(t, friday) && !dueT.some(x=>x.id===t.id));
-
-  const visibleG = [...dueG, ...excludedG].filter(x=>matchesReportSearch(x, q));
-  const visibleT = [...dueT, ...excludedT].filter(x=>matchesReportSearch(x, q));
 
   // Render
-  renderReportList('repGrat', visibleG, friday, 'gratificaciones');
-  renderReportList('repTE', visibleT, friday, 'tiempo_extra');
+  renderReportList('repGrat', dueG, friday, 'gratificaciones');
+  renderReportList('repTE', dueT, friday, 'tiempo_extra');
 
   const totalG = dueG.reduce((s,g)=> s + Number(g.monto||0), 0);
-  $('#repGratTotal').innerHTML = `<div>Total pagable</div><div><b>${fmtMoney(totalG)}</b> • ${dueG.length} item(s)</div>`;
+  $('#repGratTotal').innerHTML = `<div>Total</div><div><b>${fmtMoney(totalG)}</b> • ${dueG.length} item(s)</div>`;
 
   const totalH = dueT.reduce((s,t)=> s + Number(t.horas||0), 0);
-  $('#repTETotal').innerHTML = `<div>Total pagable</div><div><b>${totalH} h</b> • ${dueT.length} item(s)</div>`;
+  $('#repTETotal').innerHTML = `<div>Total</div><div><b>${totalH} h</b> • ${dueT.length} item(s)</div>`;
 
   // cache for export
-  window.__lastReport = { friday, dueG, dueT, visibleG, visibleT, excludedG, excludedT };
+  window.__lastReport = { friday, dueG, dueT };
 }
 
 function renderReportList(containerId, list, friday, tableName){
@@ -1443,7 +1407,7 @@ function renderReportList(containerId, list, friday, tableName){
   root.innerHTML = '';
 
   if(list.length===0){
-    root.innerHTML = `<div class="emptyState"><div class="emoji">📆</div><div><div class="emptyTitle">Sin resultados</div><div class="emptySub">No hay registros para ${fmtDateHuman(friday)} con el filtro actual.</div></div></div>`;
+    root.innerHTML = `<div class="emptyState"><div class="emoji">📆</div><div><div class="emptyTitle">Sin pagos</div><div class="emptySub">No hay registros que venzan el ${fmtDateHuman(friday)}.</div></div></div>`;
     return;
   }
 
@@ -1475,9 +1439,6 @@ function renderReportList(containerId, list, friday, tableName){
 
       const excluded = isExcluded(x, friday);
       const exBadge = excluded ? `<span class="badge warn">EXCLUIDO</span>` : '';
-      const actionBadge = (prog==='segundaSemanaViernes' || prog==='cadaSemanaViernes')
-        ? `<span class="badge">${excluded ? 'Click: volver a incluir' : 'Click: excluir/revertir'}</span>`
-        : '';
 
       div.innerHTML = `
         <div class="meta">
@@ -1489,7 +1450,7 @@ function renderReportList(containerId, list, friday, tableName){
           ${right}
           ${x.activa ? '<span class="badge ok">Activa</span>' : '<span class="badge danger">Inactiva</span>'}
           ${exBadge}
-          ${actionBadge}
+          ${(prog==='segundaSemanaViernes' || prog==='cadaSemanaViernes') ? '<span class="badge">Click: excluir/revertir</span>' : ''}
         </div>
       `;
 
@@ -2586,15 +2547,12 @@ function setupUI(){
   // Global searches
   $('#gratSearch').addEventListener('input', renderGratificacionesGlobal);
   $('#gratPrograma').addEventListener('change', renderGratificacionesGlobal);
-  $('#gratEstado')?.addEventListener('change', renderGratificacionesGlobal);
   $('#teSearch').addEventListener('input', renderTiempoExtraGlobal);
   $('#tePrograma').addEventListener('change', renderTiempoExtraGlobal);
-  $('#teEstado')?.addEventListener('change', renderTiempoExtraGlobal);
 
   // Reportes
   $('#btnRefreshReport').addEventListener('click', refreshReport);
   $('#repFriday').addEventListener('change', refreshReport);
-  $('#repSearch')?.addEventListener('input', refreshReport);
   $('#btnExportReportCSV').addEventListener('click', exportReportCSV);
   $('#btnPrintGratMemo').addEventListener('click', printGratMemo);
   $('#btnPrintTEMemo').addEventListener('click', printTEMemo);
