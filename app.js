@@ -620,14 +620,15 @@ async function renderEmpleadoDetail(root){
     </div>
   `;
 
-  // buttons
-  $('#btnEditEmp').addEventListener('click', () => openEmpleadoForm(emp));
-  $('#btnDelEmp').addEventListener('click', () => confirmDeleteEmpleado(emp));
-  $('#btnNewGrat').addEventListener('click', () => openGratForm({ empleado_id: emp.id }));
-  $('#btnNewTE').addEventListener('click', () => openTEForm({ empleado_id: emp.id }));
+  // buttons (scoped to the employee detail root to avoid colliding
+  // with the global tab buttons that use the same ids)
+  $('#btnEditEmp', root).addEventListener('click', () => openEmpleadoForm(emp));
+  $('#btnDelEmp', root).addEventListener('click', () => confirmDeleteEmpleado(emp));
+  $('#btnNewGrat', root).addEventListener('click', () => openGratForm({ empleado_id: emp.id }));
+  $('#btnNewTE', root).addEventListener('click', () => openTEForm({ empleado_id: emp.id }));
 
   // list grat
-  const gl = $('#empGratList');
+  const gl = $('#empGratList', root);
   if(grat.length===0){
     gl.innerHTML = `<div class="emptyState"><div class="emoji">🎁</div><div><div class="emptyTitle">Sin gratificaciones</div><div class="emptySub">Agrega la primera.</div></div></div>`;
   } else {
@@ -653,7 +654,7 @@ async function renderEmpleadoDetail(root){
   }
 
   // list te
-  const tl = $('#empTEList');
+  const tl = $('#empTEList', root);
   if(te.length===0){
     tl.innerHTML = `<div class="emptyState"><div class="emoji">⏱️</div><div><div class="emptyTitle">Sin tiempo extra</div><div class="emptySub">Agrega el primero.</div></div></div>`;
   } else {
@@ -857,7 +858,7 @@ function openGratForm(g){
           <label>Fecha objetivo (solo Única)</label>
           <input id="g_fecha" type="date" class="input" value="${g?.fecha_objetivo ? fmtDateISO(g.fecha_objetivo) : ''}" />
         </div>
-        <div class="field" id="g_vig_wrap">
+        <div class="field" id="t_vig_wrap">
           <label>Vigencia hasta (mes) (si aplica)</label>
           <input id="g_vig" type="date" class="input" value="${g?.vigencia_hasta_mes ? fmtDateISO(g.vigencia_hasta_mes) : ''}" />
         </div>
@@ -1005,7 +1006,7 @@ function openTEForm(t){
           <label>Fecha objetivo (solo Única)</label>
           <input id="t_fecha" type="date" class="input" value="${t?.fecha_objetivo ? fmtDateISO(t.fecha_objetivo) : ''}" />
         </div>
-        <div class="field" id="g_vig_wrap">
+        <div class="field" id="t_vig_wrap">
           <label>Vigencia hasta (mes) (si aplica)</label>
           <input id="t_vig" type="date" class="input" value="${t?.vigencia_hasta_mes ? fmtDateISO(t.vigencia_hasta_mes) : ''}" />
         </div>
