@@ -879,7 +879,7 @@ function openGratForm(g){
         ${isEdit ? '<button id="btnGSave" class="btn primary" value="default">Guardar</button>' : '<button id="btnGCreate" class="btn primary" value="default">Crear</button>'}
         ${isEdit ? '<button id="btnGDelete" class="btn danger" value="default" type="button">Borrar</button>' : ''}
       </div>
-      <div class="footnote">Regla: “Única” se paga el viernes de la semana de la fecha objetivo. “2ª semana” se paga el segundo viernes del mes (con exclusiones). “Cada semana” se paga todos los viernes.</div>
+      <div class="footnote">Regla: “Única” se paga el viernes de la semana de la fecha objetivo. “2ª semana” se paga el viernes de la 2ª semana completa del mes (con exclusiones). “Cada semana” se paga todos los viernes.</div>
     </form>
   `;
 
@@ -1287,16 +1287,32 @@ function fridayOfWeek(d){
   return v;
 }
 
-function secondFridayOfMonth(d){
+function secondPayrollFridayOfMonth(d){
   const y = d.getFullYear();
   const m = d.getMonth();
-  const fridays = [];
-  for(let day=1; day<=31; day++){
-    const x = new Date(y,m,day);
-    if(x.getMonth() !== m) break;
-    if(isFriday(x)) fridays.push(new Date(x));
-  }
-  return fridays[1] || fridays[0] || null;
+
+  // Regla LIMSA RH web:
+  // “2ª semana del mes” = viernes de la 2ª semana COMPLETA Lun-Dom del mes.
+  // Ejemplo abril 2026:
+  // - 1 al 5 abr no cuenta como semana completa del mes
+  // - 6 al 12 abr = 1ª semana completa
+  // - 13 al 19 abr = 2ª semana completa  -> viernes 17 abr
+  const firstDay = new Date(y, m, 1);
+  firstDay.setHours(0,0,0,0);
+
+  const dow = firstDay.getDay(); // 0=Dom, 1=Lun, ... 6=Sab
+  const daysUntilMonday = (1 - dow + 7) % 7;
+  const firstMonday = new Date(firstDay);
+  firstMonday.setDate(firstMonday.getDate() + daysUntilMonday);
+
+  const secondMonday = new Date(firstMonday);
+  secondMonday.setDate(secondMonday.getDate() + 7);
+
+  const friday = new Date(secondMonday);
+  friday.setDate(friday.getDate() + 4); // viernes de esa 2ª semana completa
+  friday.setHours(0,0,0,0);
+
+  return friday.getMonth() === m ? friday : null;
 }
 
 function lastDayOfMonth(d){
@@ -1335,7 +1351,7 @@ function dueGratificacion(g, friday){
 
   if(p === 'segundaSemanaViernes'){
     if(!isFriday(friday)) return false;
-    const sf = secondFridayOfMonth(friday);
+    const sf = secondPayrollFridayOfMonth(friday);
     if(!sf || !isSameDay(sf, friday)) return false;
     if(isExcluded(g, friday)) return false;
     if(g.sin_vigencia) return true;
@@ -1364,7 +1380,7 @@ function dueTiempoExtra(t, friday){
 
   if(p === 'segundaSemanaViernes'){
     if(!isFriday(friday)) return false;
-    const sf = secondFridayOfMonth(friday);
+    const sf = secondPayrollFridayOfMonth(friday);
     if(!sf || !isSameDay(sf, friday)) return false;
     if(t.sin_vigencia) return true;
     if(!t.vigencia_hasta_mes) return true;
