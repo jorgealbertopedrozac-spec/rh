@@ -287,23 +287,51 @@ async function pickEmpleado({ title='Selecciona empleado', onPick } = {}){
 // ---------------------------
 // Supabase init
 // ---------------------------
+function openLoginDialog(){
+  const dlgLogin = document.getElementById('dlgLogin');
+  if(!dlgLogin) return;
+  if(dlgLogin.open) return;
+
+  try{
+    if(typeof dlgLogin.showModal === 'function'){
+      dlgLogin.showModal();
+    } else if(typeof dlgLogin.show === 'function'){
+      dlgLogin.show();
+    } else {
+      dlgLogin.setAttribute('open', '');
+    }
+  } catch(err){
+    console.warn('No se pudo abrir el login con showModal, usando fallback.', err);
+    dlgLogin.setAttribute('open', '');
+  }
+
+  setTimeout(()=> document.getElementById('loginEmail')?.focus(), 50);
+}
+
 function setConnStatus(){
   const pill = $('#connStatus');
   const email = $('#userEmail');
   const btnLogout = $('#btnLogout');
+  const btnLoginOpen = $('#btnLoginOpen');
 
   if(connected){
     pill.textContent = 'Sesión activa';
     pill.classList.add('ok');
     pill.classList.remove('bad');
+    pill.classList.remove('clickable');
+    pill.setAttribute('title', 'Sesión activa');
     if(email) email.textContent = currentUserEmail || '';
     if(btnLogout) btnLogout.classList.remove('hidden');
+    if(btnLoginOpen) btnLoginOpen.classList.add('hidden');
   } else {
     pill.textContent = 'Sin sesión';
     pill.classList.remove('ok');
     pill.classList.add('bad');
+    pill.classList.add('clickable');
+    pill.setAttribute('title', 'Iniciar sesión');
     if(email) email.textContent = '';
     if(btnLogout) btnLogout.classList.add('hidden');
+    if(btnLoginOpen) btnLoginOpen.classList.remove('hidden');
   }
 }
 
@@ -2449,6 +2477,8 @@ function setupUI(){
   const dlgLogin = document.getElementById('dlgLogin');
   const btnLogin = document.getElementById('btnLogin');
   const btnLogout = document.getElementById('btnLogout');
+  const btnLoginOpen = document.getElementById('btnLoginOpen');
+  const connStatus = document.getElementById('connStatus');
   if(btnLogin){
     btnLogin.addEventListener('click', async ()=>{
       const email = (document.getElementById('loginEmail')?.value || '').trim();
@@ -2458,9 +2488,7 @@ function setupUI(){
       if(error){ toast(error.message || 'No se pudo iniciar sesión', 'bad'); return; }
       if(dlgLogin?.open) dlgLogin.close();
       await connect();
-  if(!connected){
-    document.getElementById('dlgLogin')?.showModal();
-  }
+      if(!connected) openLoginDialog();
     });
   }
   if(btnLogout){
@@ -2474,7 +2502,19 @@ function setupUI(){
       empleados = []; gratificacionesGlobal = []; tiempoExtraGlobal = [];
       renderEmpleados(); renderGratificacionesGlobal(); renderTiempoExtraGlobal();
       toast('Sesión cerrada');
-      dlgLogin?.showModal();
+      openLoginDialog();
+    });
+  }
+
+  const requestLogin = ()=>{ if(!connected) openLoginDialog(); };
+  if(btnLoginOpen) btnLoginOpen.addEventListener('click', requestLogin);
+  if(connStatus){
+    connStatus.addEventListener('click', requestLogin);
+    connStatus.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        requestLogin();
+      }
     });
   }
 
@@ -2483,7 +2523,7 @@ function setupUI(){
     connected = !!session;
     currentUserEmail = session?.user?.email || '';
     setConnStatus();
-    if(!session){ dlgLogin?.showModal(); }
+    if(!session){ openLoginDialog(); }
   });
 
 
@@ -2665,7 +2705,7 @@ function setupUI(){
 
   await connect();
   if(!connected){
-    document.getElementById('dlgLogin')?.showModal();
+    openLoginDialog();
   }
 
   // keyboard help

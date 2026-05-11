@@ -345,3 +345,13 @@ a:visited{ color: var(--primary2); }
   .report-search-wrap{min-width:100%;flex-basis:100%}
   .report-search-input{min-width:0}
 }
+
+/* Login access: make "Sin sesión" clearly tappable on mobile */
+.pill.clickable{ cursor:pointer; user-select:none; }
+.pill.clickable:active{ transform:scale(.98); }
+#btnLoginOpen{ white-space:nowrap; }
+
+@media(max-width:520px){
+  .conn{ gap:6px; }
+  #btnLoginOpen.small, #btnLogout.small{ padding:7px 9px; }
+}
