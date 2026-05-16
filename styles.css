@@ -185,6 +185,31 @@ textarea.input{resize:vertical}
 .hint{margin-top:10px;font-size:12px;color:var(--muted)}
 
 .emptyState{display:flex;align-items:center;gap:12px;padding:30px 12px;color:var(--muted)}
+
+.reportSectionTitle{
+  margin-top:12px;
+  padding-top:4px;
+  font-size:13px;
+  font-weight:900;
+  color:var(--text);
+}
+.reportSectionTitle.excluded{
+  margin-top:18px;
+  padding-top:12px;
+  border-top:1px dashed rgba(255,255,255,.18);
+  color:#fff0cc;
+}
+.reportExcludedItem{
+  opacity:.78;
+  background:rgba(255,199,87,.055);
+  border-style:dashed;
+}
+.reportExcludedItem:hover{
+  opacity:1;
+  border-color:rgba(255,199,87,.35);
+}
+.emptyState.compact{padding:14px 12px}
+.emptyState.compact .emoji{font-size:22px}
 .emoji{font-size:30px}
 .emptyTitle{color:var(--text);font-weight:800}
 .emptySub{font-size:13px}

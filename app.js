@@ -1410,6 +1410,7 @@ function dueTiempoExtra(t, friday){
     if(!isFriday(friday)) return false;
     const sf = secondPayrollFridayOfMonth(friday);
     if(!sf || !isSameDay(sf, friday)) return false;
+    if(isExcluded(t, friday)) return false;
     if(t.sin_vigencia) return true;
     if(!t.vigencia_hasta_mes) return true;
     const fin = lastDayOfMonth(parseDateLocal(t.vigencia_hasta_mes) || new Date(t.vigencia_hasta_mes));
@@ -1419,6 +1420,56 @@ function dueTiempoExtra(t, friday){
   if(p === 'cadaSemanaViernes'){
     if(!isFriday(friday)) return false;
     return !isExcluded(t, friday);
+  }
+
+  return false;
+}
+
+function reportableGratificacion(g, friday){
+  if(!g.activa) return false;
+  const p = g.programa;
+
+  if(p === 'unicaViernes'){
+    return dueGratificacion(g, friday);
+  }
+
+  if(p === 'segundaSemanaViernes'){
+    if(!isFriday(friday)) return false;
+    const sf = secondPayrollFridayOfMonth(friday);
+    if(!sf || !isSameDay(sf, friday)) return false;
+    if(g.sin_vigencia) return true;
+    if(!g.vigencia_hasta_mes) return true;
+    const fin = lastDayOfMonth(parseDateLocal(g.vigencia_hasta_mes) || new Date(g.vigencia_hasta_mes));
+    return friday <= fin;
+  }
+
+  if(p === 'cadaSemanaViernes'){
+    return isFriday(friday);
+  }
+
+  return false;
+}
+
+function reportableTiempoExtra(t, friday){
+  if(!t.activa) return false;
+  const p = t.programa;
+
+  if(p === 'unicaViernes'){
+    return dueTiempoExtra(t, friday);
+  }
+
+  if(p === 'segundaSemanaViernes'){
+    if(!isFriday(friday)) return false;
+    const sf = secondPayrollFridayOfMonth(friday);
+    if(!sf || !isSameDay(sf, friday)) return false;
+    if(t.sin_vigencia) return true;
+    if(!t.vigencia_hasta_mes) return true;
+    const fin = lastDayOfMonth(parseDateLocal(t.vigencia_hasta_mes) || new Date(t.vigencia_hasta_mes));
+    return friday <= fin;
+  }
+
+  if(p === 'cadaSemanaViernes'){
+    return isFriday(friday);
   }
 
   return false;
@@ -1442,8 +1493,13 @@ async function refreshReport(){
   // Refleja la fecha normalizada en el input para evitar confusión visual.
   $('#repFriday').value = fmtDateISO(friday);
 
-  const dueG = gratificacionesGlobal.filter(g=> dueGratificacion(g, friday));
-  const dueT = tiempoExtraGlobal.filter(t=> dueTiempoExtra(t, friday));
+  const reportableG = gratificacionesGlobal.filter(g=> reportableGratificacion(g, friday));
+  const reportableT = tiempoExtraGlobal.filter(t=> reportableTiempoExtra(t, friday));
+
+  const dueG = reportableG.filter(g=> !isExcluded(g, friday));
+  const dueT = reportableT.filter(t=> !isExcluded(t, friday));
+  const excludedG = reportableG.filter(g=> isExcluded(g, friday));
+  const excludedT = reportableT.filter(t=> isExcluded(t, friday));
 
   const repQuery = ($('#repSearch')?.value || '').trim().toLowerCase();
   const reportMatches = (x) => {
@@ -1463,10 +1519,12 @@ async function refreshReport(){
 
   const shownG = dueG.filter(reportMatches);
   const shownT = dueT.filter(reportMatches);
+  const shownExcludedG = excludedG.filter(reportMatches);
+  const shownExcludedT = excludedT.filter(reportMatches);
 
-  // Render
-  renderReportList('repGrat', shownG, friday, 'gratificaciones');
-  renderReportList('repTE', shownT, friday, 'tiempo_extra');
+  // Render: los incluidos suman/exportan; los excluidos quedan visibles para poder revertirlos.
+  renderReportList('repGrat', shownG, friday, 'gratificaciones', shownExcludedG);
+  renderReportList('repTE', shownT, friday, 'tiempo_extra', shownExcludedT);
 
   const totalG = shownG.reduce((s,g)=> s + Number(g.monto||0), 0);
   $('#repGratTotal').innerHTML = `<div>Total</div><div><b>${fmtMoney(totalG)}</b> • ${shownG.length} item(s)</div>`;
@@ -1478,14 +1536,31 @@ async function refreshReport(){
   window.__lastReport = { friday, dueG: shownG, dueT: shownT };
 }
 
-function renderReportList(containerId, list, friday, tableName){
+function renderReportList(containerId, list, friday, tableName, excludedList=[]){
   const root = $(`#${containerId}`);
   root.innerHTML = '';
 
-  if(list.length===0){
+  if(list.length===0 && excludedList.length===0){
     root.innerHTML = `<div class="emptyState"><div class="emoji">📆</div><div><div class="emptyTitle">Sin pagos</div><div class="emptySub">No hay registros que venzan el ${fmtDateHuman(friday)}.</div></div></div>`;
     return;
   }
+
+  if(list.length===0){
+    root.innerHTML = `<div class="emptyState compact"><div class="emoji">✅</div><div><div class="emptyTitle">Sin pagos incluidos</div><div class="emptySub">Los registros visibles abajo están excluidos de este viernes y no suman al total.</div></div></div>`;
+  } else {
+    renderReportSection(root, list, friday, tableName, 'Pagos incluidos', false);
+  }
+
+  if(excludedList.length>0){
+    renderReportSection(root, excludedList, friday, tableName, 'Excluidos de este viernes', true);
+  }
+}
+
+function renderReportSection(root, list, friday, tableName, title, forceExcluded=false){
+  const titleEl = document.createElement('div');
+  titleEl.className = forceExcluded ? 'reportSectionTitle excluded' : 'reportSectionTitle';
+  titleEl.textContent = `${title} — ${list.length} item(s)`;
+  root.appendChild(titleEl);
 
   // group by programa
   const groups = {
@@ -1508,13 +1583,16 @@ function renderReportList(containerId, list, friday, tableName){
     items.forEach(x => {
       const emp = empOf(x);
       const div = document.createElement('div');
-      div.className = 'item';
+      div.className = forceExcluded ? 'item reportExcludedItem' : 'item';
       const right = (tableName==='gratificaciones')
         ? `<span class="badge">${fmtMoney(x.monto)}</span>`
         : `<span class="badge">${Number(x.horas||0)} h</span>`;
 
-      const excluded = isExcluded(x, friday);
+      const excluded = forceExcluded || isExcluded(x, friday);
       const exBadge = excluded ? `<span class="badge warn">EXCLUIDO</span>` : '';
+      const actionBadge = excluded ? 'Click: volver a incluir' : 'Click: excluir';
+      const canToggleExclusion = (prog==='segundaSemanaViernes' || prog==='cadaSemanaViernes');
+      const canReprogram = excluded && tableName==='gratificaciones';
 
       div.innerHTML = `
         <div class="meta">
@@ -1526,11 +1604,21 @@ function renderReportList(containerId, list, friday, tableName){
           ${right}
           ${x.activa ? '<span class="badge ok">Activa</span>' : '<span class="badge danger">Inactiva</span>'}
           ${exBadge}
-          ${(prog==='segundaSemanaViernes' || prog==='cadaSemanaViernes') ? '<span class="badge">Click: excluir/revertir</span>' : ''}
+          ${canToggleExclusion ? `<span class="badge">${actionBadge}</span>` : ''}
+          ${canReprogram ? '<button type="button" class="miniBtn reprogramBtn">Reprogramar a viernes</button>' : ''}
         </div>
       `;
 
-      if(prog==='segundaSemanaViernes' || prog==='cadaSemanaViernes'){
+      const reprogramBtn = $('.reprogramBtn', div);
+      if(reprogramBtn){
+        reprogramBtn.addEventListener('click', (ev)=>{
+          ev.preventDefault();
+          ev.stopPropagation();
+          openReprogramGratificacionDialog(x, friday);
+        });
+      }
+
+      if(canToggleExclusion){
         div.addEventListener('click', async ()=>{
           await toggleExclusion(tableName, x, friday);
         });
@@ -1547,6 +1635,98 @@ function renderReportList(containerId, list, friday, tableName){
       root.appendChild(div);
     });
   }
+}
+
+
+function openReprogramGratificacionDialog(original, originalFriday){
+  const dlg = $('#dlg');
+  const emp = empOf(original) || {};
+  const originalIso = fmtDateISO(originalFriday);
+
+  dlg.innerHTML = `
+    <form method="dialog" class="modalContent">
+      <div class="modalHeader">
+        <h3>Reprogramar gratificación</h3>
+        <button class="iconBtn" value="cancel" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="field">
+        <label>Empleado</label>
+        <input class="input" value="${escapeHtml(emp?.nombre || '—')}" disabled />
+      </div>
+
+      <div class="split">
+        <div class="field">
+          <label>Monto</label>
+          <input class="input" value="${fmtMoney(original.monto || 0)}" disabled />
+        </div>
+        <div class="field">
+          <label>Viernes original excluido</label>
+          <input class="input" value="${escapeHtml(originalIso)}" disabled />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Viernes en que se pagará como excepción</label>
+        <input id="rg_fecha" type="date" class="input" />
+      </div>
+
+      <div class="field">
+        <label>Nota / motivo de la gratificación única</label>
+        <textarea id="rg_motivo" class="input" rows="3">${escapeHtml(`Pago pendiente reprogramado por exclusión accidental del ${originalIso} — ${original.motivo || 'Gratificación'}`)}</textarea>
+      </div>
+
+      <hr />
+      <div class="right">
+        <button id="btnReprogramarG" class="btn primary" value="default">Crear gratificación única</button>
+      </div>
+      <div class="footnote">Se creará una nueva gratificación con programa “Única” para el viernes seleccionado. La exclusión original se conserva para no modificar el historial.</div>
+    </form>
+  `;
+
+  const inputFecha = $('#rg_fecha', dlg);
+  const suggested = nextFriday(originalFriday);
+  inputFecha.value = fmtDateISO(suggested);
+
+  dlg.showModal();
+
+  $('#btnReprogramarG', dlg).addEventListener('click', async (ev)=>{
+    ev.preventDefault();
+    try{
+      const selected = parseDateLocal(inputFecha.value);
+      if(!selected) throw new Error('Selecciona una fecha');
+      selected.setHours(0,0,0,0);
+      if(!isFriday(selected)) throw new Error('La fecha seleccionada debe ser viernes');
+
+      const motivo = ($('#rg_motivo', dlg).value || '').trim();
+      if(!motivo) throw new Error('Falta la nota / motivo');
+
+      const payload = {
+        empleado_id: original.empleado_id,
+        motivo,
+        monto: Number(original.monto || 0),
+        programa: 'unicaViernes',
+        fecha_objetivo: fmtDateISO(selected),
+        sin_vigencia: false,
+        vigencia_hasta_mes: null,
+        activa: true,
+        exclusiones: [],
+      };
+
+      const { error } = await supabase.from('gratificaciones').insert(payload);
+      if(error) throw error;
+
+      toast('Gratificación única reprogramada');
+      dlg.close();
+      await refreshAll();
+      await refreshReport();
+      if(selectedEmpleado?.id === original.empleado_id) await selectEmpleado(original.empleado_id);
+
+    } catch(err){
+      console.error(err);
+      toast(err.message || 'No se pudo reprogramar', 'bad');
+    }
+  });
 }
 
 async function toggleExclusion(tableName, record, friday){
